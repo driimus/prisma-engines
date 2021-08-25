@@ -301,8 +301,8 @@ impl TestApi {
     }
 
     #[track_caller]
-    pub async fn raw_cmd(&self, sql: &str) {
-        self.api.quaint().raw_cmd(sql).await.unwrap()
+    pub async fn raw_cmd(&self, query: &str) {
+        self.api.quaint().raw_cmd(query).await.unwrap()
     }
 }
 

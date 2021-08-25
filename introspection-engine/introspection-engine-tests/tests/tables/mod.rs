@@ -174,7 +174,7 @@ async fn a_table_with_unique_index(api: &TestApi) -> TestResult {
     let dm = indoc! {r##"
         model Blog {
             id       Int @id @default(autoincrement())
-            authorId Int @unique
+            authorId Int @unique(map: "test")
         }
     "##};
 
@@ -201,7 +201,7 @@ async fn a_table_with_multi_column_unique_index(api: &TestApi) -> TestResult {
             id      Int @id @default(autoincrement())
             firstname Int
             lastname Int
-            @@unique([firstname, lastname], name: "test")
+            @@unique([firstname, lastname], map: "test")
         }
     "##};
 
@@ -567,7 +567,7 @@ async fn a_table_with_partial_indexes_should_ignore_them(api: &TestApi) -> TestR
             id       Int     @id @default(autoincrement())
             staticId Int
             latest   Int
-            other    Int     @unique
+            other    Int     @unique(map: "full")
         }
         "#
     };
@@ -876,39 +876,36 @@ async fn unique_and_id_on_same_field_works_mssql(api: &TestApi) -> TestResult {
 // If a later alter table statement adds another unique constraint then it is persisted as its own
 // entity and can be introspected.
 async fn unique_and_index_on_same_field_works_postgres(api: &TestApi) -> TestResult {
-    api.barrel()
-        .execute(|migration| {
-            migration.inject_custom(
-                "create table users (
-                       id Integer primary key not null,
-                       CONSTRAINT really_must_be_different UNIQUE (id),
-                       CONSTRAINT must_be_different UNIQUE (id)
-                     );",
-            )
-        })
-        .await?;
+    api.raw_cmd(
+        "
+        CREATE TABLE users (
+            id Integer primary key not null,
+            CONSTRAINT really_must_be_different UNIQUE (id),
+            CONSTRAINT must_be_different UNIQUE (id)
+        );",
+    )
+    .await;
 
-    let dm = indoc! {r##"
+    let expectation = expect![[r#"
         model users {
-          id Int @id
+          id Int @id(map: "really_must_be_different")
         }
-    "##};
+    "#]];
 
-    let result = &api.introspect().await?;
-    api.assert_eq_datamodels(dm, result);
+    let result = api.introspect_dml().await?;
+    expectation.assert_eq(&result);
 
-    api.barrel()
-        .execute(|migration| migration.inject_custom("Alter table users Add Constraint z_unique Unique(id);"))
-        .await?;
+    api.raw_cmd("ALTER TABLE users ADD CONSTRAINT z_unique UNIQUE(id);")
+        .await;
 
-    let dm2 = indoc! {r##"
+    let expectation = expect![[r#"
         model users {
-          id Int @id @unique
+          id Int @id(map: "really_must_be_different") @unique(map: "z_unique")
         }
-    "##};
+    "#]];
 
-    let result = &api.introspect().await?;
-    api.assert_eq_datamodels(dm2, result);
+    let result = api.introspect_dml().await?;
+    expectation.assert_eq(&result);
 
     Ok(())
 }

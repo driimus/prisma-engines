@@ -31,7 +31,7 @@ async fn a_table_without_uniques_should_ignore(api: &TestApi) -> TestResult {
           user_id Int
           User    User @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-          @@index([user_id], name: "Post_user_id_idx")
+          @@index([user_id])
           @@ignore
         }
 
@@ -128,19 +128,20 @@ async fn a_table_without_fully_required_compound_unique(api: &TestApi) -> TestRe
         })
         .await?;
 
-    let dm = indoc! {r#"
+    let dm = expect![[r#"
         /// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by the Prisma Client.
         model Post {
           id         Int
           opt_unique Int?
           req_unique Int
 
-          @@unique([opt_unique, req_unique], name: "sqlite_autoindex_Post_1")
+          @@unique([opt_unique, req_unique], map: "sqlite_autoindex_Post_1")
           @@ignore
         }
-    "#};
+    "#]];
 
-    api.assert_eq_datamodels(dm, &api.introspect().await?);
+    let result = api.introspect_dml().await?;
+    dm.assert_eq(&result);
 
     Ok(())
 }
@@ -174,19 +175,21 @@ async fn unsupported_type_keeps_its_usages(api: &TestApi) -> TestResult {
 
     assert_eq_json!(expected, api.introspection_warnings().await?);
 
-    let dm = indoc! {r#"
-        modelTest{
-            id          Int     @unique
-            dummy       Int
-            broken Unsupported("macaddr")
+    let dm = expect![[r#"
+        model Test {
+          id     Int                    @unique
+          dummy  Int
+          broken Unsupported("macaddr")
 
-            @@id([broken, dummy])
-            @@unique([broken, dummy], name: "unique")
-            @@index([broken, dummy], name: "non_unique")
+          @@id([broken, dummy])
+          @@unique([broken, dummy], map: "unique")
+          @@index([broken, dummy], map: "non_unique")
         }
-    "#};
+    "#]];
 
-    api.assert_eq_datamodels(dm, &api.introspect().await?);
+    let result = api.introspect_dml().await?;
+
+    dm.assert_eq(&result);
 
     Ok(())
 }

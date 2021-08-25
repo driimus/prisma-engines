@@ -275,7 +275,7 @@ async fn mapped_field_name(api: &TestApi) -> TestResult {
 
             @@id([c_id_1, id_2])
             @@index([c_index], name: "test2")
-            @@unique([c_unique_1, unique_2], name: "sqlite_autoindex_User_1")
+            @@unique([c_unique_1, unique_2], map: "sqlite_autoindex_User_1")
         }
     "#};
 
@@ -289,7 +289,7 @@ async fn mapped_field_name(api: &TestApi) -> TestResult {
 
             @@id([c_id_1, id_2])
             @@index([c_index], name: "test2")
-            @@unique([c_unique_1, unique_2], name: "sqlite_autoindex_User_1")
+            @@unique([c_unique_1, unique_2], map: "sqlite_autoindex_User_1")
         }
 
         model Unrelated {

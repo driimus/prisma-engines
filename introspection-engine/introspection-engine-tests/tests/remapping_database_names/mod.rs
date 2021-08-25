@@ -145,7 +145,7 @@ async fn remapping_models_in_relations(api: &TestApi) -> TestResult {
     let expected = expect![[r#"
         model Post {
           id              Int             @id @default(autoincrement())
-          user_id         Int             @unique
+          user_id         Int             @unique(map: "post_user_unique")
           User_with_Space User_with_Space @relation(fields: [user_id], references: [id])
         }
 
@@ -195,7 +195,7 @@ async fn remapping_models_in_relations_should_not_map_virtual_fields(api: &TestA
     let expected = expect![[r#"
         model Post_With_Space {
           id      Int  @id @default(autoincrement())
-          user_id Int  @unique
+          user_id Int  @unique(map: "post_user_unique")
           User    User @relation(fields: [user_id], references: [id])
 
           @@map("Post With Space")
@@ -258,7 +258,7 @@ async fn remapping_fields_in_compound_relations(api: &TestApi) -> TestResult {
           user_age Int
           User     User @relation(fields: [user_id, user_age], references: [id, age_that_is_invalid])
 
-          @@unique([user_id, user_age], name: "post_user_unique")
+          @@unique([user_id, user_age], map: "post_user_unique")
         }
 
         model User {
@@ -266,7 +266,7 @@ async fn remapping_fields_in_compound_relations(api: &TestApi) -> TestResult {
           age_that_is_invalid Int   @map("age-that-is-invalid")
           Post                Post?
 
-          @@unique([id, age_that_is_invalid], name: "user_unique")
+          @@unique([id, age_that_is_invalid], map: "user_unique")
         }
     "#]];
 

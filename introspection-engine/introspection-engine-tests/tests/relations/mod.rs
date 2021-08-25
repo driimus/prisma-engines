@@ -629,7 +629,7 @@ async fn relations_should_avoid_name_clashes_2(api: &TestApi) -> TestResult {
           y_x_yToy             y   @relation("x_yToy", fields: [y], references: [id], onDelete: NoAction, onUpdate: NoAction)
           y_xToy_fk_x_1_fk_x_2 y[] @relation("xToy_fk_x_1_fk_x_2")
 
-          @@unique([id, y], name: "unique_y_id")
+          @@unique([id, y], map: "unique_y_id")
         }
 
         model y {
