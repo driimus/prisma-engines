@@ -43,7 +43,7 @@ async fn one_to_one_req_relation(api: &TestApi) -> TestResult {
     Ok(())
 }
 
-#[test_connector(exclude(Mssql, Mysql))]
+#[test_connector(exclude(Mssql, Mysql, Sqlite))]
 async fn one_to_one_relation_on_a_singular_primary_key(api: &TestApi) -> TestResult {
     api.barrel()
         .execute(|migration| {
@@ -60,7 +60,7 @@ async fn one_to_one_relation_on_a_singular_primary_key(api: &TestApi) -> TestRes
 
     let expected = expect![[r#"
         model Post {
-          id   Int  @unique(map: "sqlite_autoindex_Post_1")
+          id   Int  @unique
           User User @relation(fields: [id], references: [id], onDelete: NoAction, onUpdate: NoAction)
         }
 
@@ -75,22 +75,13 @@ async fn one_to_one_relation_on_a_singular_primary_key(api: &TestApi) -> TestRes
     Ok(())
 }
 
-#[test_connector(exclude(Mssql, Mysql))]
+#[test_connector(exclude(Mssql, Mysql, Sqlite))]
 async fn two_one_to_one_relations_between_the_same_models(api: &TestApi) -> TestResult {
-    let sql_family = api.sql_family();
-
     api.barrel()
         .execute(move |migration| {
             migration.create_table("User", move |t| {
                 t.add_column("id", types::primary());
                 t.add_column("post_id", types::integer().unique(true).nullable(false));
-
-                // Other databases can't create a foreign key before the table
-                // exists, SQLite can, but cannot alter table with a foreign
-                // key.
-                if sql_family.is_sqlite() {
-                    t.add_foreign_key(&["post_id"], "Post", &["id"]);
-                }
             });
 
             migration.create_table("Post", |t| {
@@ -99,28 +90,23 @@ async fn two_one_to_one_relations_between_the_same_models(api: &TestApi) -> Test
                 t.add_foreign_key(&["user_id"], "User", &["id"]);
             });
 
-            // Other databases can't create a foreign key before the table
-            // exists, SQLite can, but cannot alter table with a foreign
-            // key.
-            if !sql_family.is_sqlite() {
-                migration.change_table("User", |t| {
-                    t.add_foreign_key(&["post_id"], "Post", &["id"]);
-                })
-            }
+            migration.change_table("User", |t| {
+                t.add_foreign_key(&["post_id"], "Post", &["id"]);
+            })
         })
         .await?;
 
     let expected = expect![[r#"
         model Post {
           id                      Int   @id @default(autoincrement())
-          user_id                 Int   @unique(map: "sqlite_autoindex_Post_1")
+          user_id                 Int   @unique
           User_Post_user_idToUser User  @relation("Post_user_idToUser", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
           User_PostToUser_post_id User? @relation("PostToUser_post_id")
         }
 
         model User {
           id                      Int   @id @default(autoincrement())
-          post_id                 Int   @unique(map: "sqlite_autoindex_User_1")
+          post_id                 Int   @unique
           Post_PostToUser_post_id Post  @relation("PostToUser_post_id", fields: [post_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
           Post_Post_user_idToUser Post? @relation("Post_user_idToUser")
         }

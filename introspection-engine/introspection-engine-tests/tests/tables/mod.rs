@@ -1,10 +1,9 @@
+mod mysql;
+
 use barrel::{functions, types};
-use expect_test::expect;
-use indoc::formatdoc;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use introspection_engine_tests::test_api::*;
 use quaint::prelude::Queryable;
-use test_macros::test_connector;
 
 #[test_connector(tags(Mysql57))]
 async fn nul_default_bytes(api: &TestApi) -> TestResult {
@@ -332,7 +331,7 @@ async fn a_table_with_a_multi_column_non_unique_index(api: &TestApi) -> TestResu
 }
 
 // SQLite does not have a serial type that's not a primary key.
-#[test_connector(exclude(Sqlite))]
+#[test_connector(exclude(Sqlite, Mysql))]
 async fn a_table_with_non_id_autoincrement(api: &TestApi) -> TestResult {
     api.barrel()
         .execute(|migration| {
@@ -771,19 +770,17 @@ async fn casing_should_not_lead_to_mix_ups(api: &TestApi) -> TestResult {
 
 #[test_connector(tags(Mysql), exclude(Mariadb))]
 async fn unique_and_index_on_same_field_works_mysql(api: &TestApi) -> TestResult {
-    api.barrel()
-        .execute(|migration| {
-            migration.inject_custom(
-                "create table users (
-                       id serial primary key not null
-                     );",
-            )
-        })
-        .await?;
+    let setup = r#"
+        CREATE TABLE users (
+            id SERIAL PRIMARY KEY NOT NULL
+        );
+    "#;
+
+    api.raw_cmd(setup).await;
 
     let dm = indoc! {r##"
         model users {
-          id BigInt @id @unique @default(autoincrement()) @db.UnsignedBigInt
+          id BigInt @id @unique(map: "id") @default(autoincrement()) @db.UnsignedBigInt
         }
     "##};
 
@@ -795,20 +792,18 @@ async fn unique_and_index_on_same_field_works_mysql(api: &TestApi) -> TestResult
 
 #[test_connector(tags(Mariadb))]
 async fn unique_and_index_on_same_field_works_mariadb(api: &TestApi) -> TestResult {
-    api.barrel()
-        .execute(|migration| {
-            migration.inject_custom(
-                "create table users (
-                       id Integer primary key not null,
-                       CONSTRAINT really_must_be_different UNIQUE (id)
-                     );",
-            )
-        })
-        .await?;
+    let setup = r#"
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY NOT NULL,
+            CONSTRAINT really_must_be_different UNIQUE (id)
+        );
+    "#;
+
+    api.raw_cmd(setup).await;
 
     let dm = indoc! {r##"
         model users {
-          id Int @id @unique
+          id Int @id @unique(map: "really_must_be_different")
         }
     "##};
 
@@ -848,7 +843,7 @@ async fn unique_and_id_on_same_field_works_mssql(api: &TestApi) -> TestResult {
             migration.inject_custom(format!(
                 "create table {}.users (
                        id int identity primary key,
-                       constraint unique_and_index_same unique(id) 
+                       constraint unique_and_index_same unique(id)
                      );",
                 schema
             ))

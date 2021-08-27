@@ -86,7 +86,7 @@ async fn relations_between_ignored_models_should_not_have_field_level_ignores(ap
     Ok(())
 }
 
-#[test_connector(exclude(Sqlite))]
+#[test_connector(exclude(Sqlite, Mysql))]
 async fn a_table_without_required_uniques(api: &TestApi) -> TestResult {
     api.barrel()
         .execute(|migration| {
@@ -97,7 +97,7 @@ async fn a_table_without_required_uniques(api: &TestApi) -> TestResult {
         })
         .await?;
 
-    let dm = indoc! {r#"
+    let expected = expect![[r#"
         /// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by the Prisma Client.
         model Post {
           id         Int
@@ -105,9 +105,9 @@ async fn a_table_without_required_uniques(api: &TestApi) -> TestResult {
 
           @@ignore
         }
-    "#};
+    "#]];
 
-    api.assert_eq_datamodels(dm, &api.introspect().await?);
+    expected.assert_eq(&api.introspect_dml().await?);
 
     Ok(())
 }

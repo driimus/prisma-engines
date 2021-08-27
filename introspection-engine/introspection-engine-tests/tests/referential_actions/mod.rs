@@ -72,7 +72,7 @@ async fn referential_actions_mysql(api: &TestApi) -> TestResult {
           a_id Int
           a    a   @relation(fields: [a_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-          @@index([a_id], name: "asdf")
+          @@index([a_id], map: "asdf")
         }
     "#]];
 
@@ -183,7 +183,7 @@ async fn default_referential_actions_with_restrict_mysql(api: &TestApi) -> TestR
           a_id Int
           a    a   @relation(fields: [a_id], references: [id])
 
-          @@index([a_id], name: "asdf")
+          @@index([a_id], map: "asdf")
         }
     "#]];
 
@@ -295,7 +295,7 @@ async fn default_optional_actions_mysql(api: &TestApi) -> TestResult {
           a_id Int?
           a    a?   @relation(fields: [a_id], references: [id])
 
-          @@index([a_id], name: "asdf")
+          @@index([a_id], map: "asdf")
         }
     "#]];
 
