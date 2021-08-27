@@ -672,6 +672,7 @@ impl<'a> Validator<'a> {
                         .unwrap_or_default()
                 {
                     referential_actions::detect_cycles(datamodel, model, field, field_span, &mut errors);
+                    referential_actions::detect_multiple_cascading_paths(datamodel, model, field);
                 }
             } else {
                 let message = format!(

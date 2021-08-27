@@ -837,8 +837,26 @@ fn sql_server_cascading_cyclic_hop_over_table_relations() {
     expect.assert_eq(&datamodel::parse_schema(dml).map(drop).unwrap_err());
 }
 
+// Parent model Post, parent field: author
+// *********************
+// Path: Post.author → User
+// *********************
+//
+// Parent model Comment, parent field: writtenBy
+// push: Post.author
+// *********************
+// Path: Comment.post → Post → User
+// Path: Comment.writtenBy → User
+// *********************
+//
+// Parent model Comment, parent field: post
+// push: Post.author
+// *********************
+// Path: Comment.post → Post → User
+// Path: Comment.writtenBy → User
+// *********************
 #[test]
-fn sql_server_cascading_cyclic_hop_over_backrelation() {
+fn sql_server_multiple_cascading_paths1() {
     let dml = indoc! {
         r#"
         datasource test {
@@ -848,6 +866,7 @@ fn sql_server_cascading_cyclic_hop_over_backrelation() {
 
         model User {
             id        Int       @id @default(autoincrement())
+            addressId Int
             comments  Comment[]
             posts     Post[]
         }
@@ -902,58 +921,145 @@ fn sql_server_cascading_cyclic_hop_over_backrelation() {
     expect.assert_eq(&datamodel::parse_schema(dml).map(drop).unwrap_err());
 }
 
+// Parent model User, parent field: address
+// *********************
+// Path: User.address → Address
+// *********************
+//
+// Parent model Post, parent field: author
+// *********************
+// Path: Post.author → User → Address
+// *********************
+//
+// Parent model Cement, parent field: post
+// *********************
+// Path: Cement.tag → Tag
+// Path: Cement.user → User → Address
+// Path: Cement.post → Post → User → Address
+// *********************
+//
+// Parent model Cement, parent field: user
+// *********************
+// Path: Cement.tag → Tag
+// Path: Cement.user → User → Address
+// Path: Cement.post → Post → User → Address
+// *********************
+//
+// Parent model Cement, parent field: tag
+// *********************
+// Path: Cement.tag → Tag
+// Path: Cement.user → User → Address
+// Path: Cement.post → Post → User → Address
+// *********************
+//
+// Parent model Comment, parent field: writtenBy
+// *********************
+// Path: Comment.cement → Cement → Tag
+// Path: Comment.cement → Cement → User → Address
+// Path: Comment.cement → Cement → Post → User → Address
+// Path: Comment.post → Post → User → Address
+// Path: Comment.writtenBy → User → Address
+// *********************
+//
+// Parent model Comment, parent field: post
+// *********************
+// Path: Comment.cement → Cement → Tag
+// Path: Comment.cement → Cement → User → Address
+// Path: Comment.cement → Cement → Post → User → Address
+// Path: Comment.post → Post → User → Address
+// Path: Comment.writtenBy → User → Address
+// *********************
+//
+// Parent model Comment, parent field: cement
+// *********************
+// Path: Comment.cement → Cement → Tag
+// Path: Comment.cement → Cement → User → Address
+// Path: Comment.cement → Cement → Post → User → Address
+// Path: Comment.post → Post → User → Address
+// Path: Comment.writtenBy → User → Address
+// *********************
 #[test]
-fn sql_server_cascading_cyclic_crossing_path_relations() {
+fn sql_server_multiple_cascading_paths2() {
     let dml = indoc! {
         r#"
-        datasource db {
+        datasource test {
             provider = "sqlserver"
-            url = "sqlserver://"
+            url      = "sqlserver://localhost:1433;database=master;user=SA;password=<YourStrong@Passw0rd>;trustServerCertificate=true"
         }
 
-        model A {
-            id     Int  @id @default(autoincrement())
-            bId    Int
-            b      B    @relation(fields: [bId], references: [id])
-            cs     C[]
+        model Address {
+            id        Int       @id @default(autoincrement())
+            users     User[]
         }
 
-        model B {
-            id     Int  @id @default(autoincrement())
-            as     A[]
-            cs     C[]
+        model User {
+            id        Int       @id @default(autoincrement())
+            addressId Int
+            address   Address   @relation(fields: [addressId], references: [id])
+            comments  Comment[]
+            posts     Post[]
+            cements   Cement[]
         }
 
-        model C {
-            id     Int  @id @default(autoincrement())
-            aId    Int
-            bId    Int
-            a      A    @relation(fields: [aId], references: [id])
-            b      B    @relation(fields: [bId], references: [id])
+        model Post {
+            id        Int       @id @default(autoincrement())
+            authorId  Int
+            author    User      @relation(fields: [authorId], references: [id])
+            comments  Comment[]
+            tags      Tag[]     @relation("TagToPost")
+            cements   Cement[]
+        }
+
+        model Cement {
+            id          Int       @id @default(autoincrement())
+            postId      Int
+            userId      Int
+            tagId       Int
+            post        Post      @relation(fields: [postId], references: [id])
+            user        User      @relation(fields: [userId], references: [id])
+            tag         Tag       @relation(fields: [tagId], references: [id])
+            comments    Comment[]
+        }
+
+        model Comment {
+            id          Int      @id @default(autoincrement())
+            writtenById Int
+            postId      Int
+            cementId    Int
+            writtenBy   User     @relation(fields: [writtenById], references: [id])
+            post        Post     @relation(fields: [postId], references: [id])
+            cement      Cement   @relation(fields: [cementId], references: [id])
+        }
+
+        model Tag {
+            id      Int    @id @default(autoincrement())
+            tag     String @unique
+            posts   Post[] @relation("TagToPost")
+            cements Cement[] 
         }
     "#};
 
     let expect = expect![[r#"
-        [1;91merror[0m: [1mError parsing attribute "@relation": Reference causes a cycle or multiple cascade paths. One of the @relation attributes in this cycle must have `onDelete` and `onUpdate` referential actions set to `NoAction`. Cycle path: A.b → B.cs → C.a. Implicit default `onUpdate` value: `Cascade`. Read more at https://pris.ly/d/cyclic-referential-actions[0m
-          [1;94m-->[0m  [4mschema.prisma:9[0m
+        [1;91merror[0m: [1mError parsing attribute "@relation": Reference causes a cycle or multiple cascade paths. One of the @relation attributes in this cycle must have `onDelete` and `onUpdate` referential actions set to `NoAction`. Cycle path: Post.author → User.comments → Comment.post. Implicit default `onUpdate` value: `Cascade`. Read more at https://pris.ly/d/cyclic-referential-actions[0m
+          [1;94m-->[0m  [4mschema.prisma:15[0m
         [1;94m   | [0m
-        [1;94m 8 | [0m    bId    Int
-        [1;94m 9 | [0m    [1;91mb      B    @relation(fields: [bId], references: [id])[0m
-        [1;94m10 | [0m    cs     C[]
+        [1;94m14 | [0m    authorId  Int
+        [1;94m15 | [0m    [1;91mauthor    User      @relation(fields: [authorId], references: [id])[0m
+        [1;94m16 | [0m    comments  Comment[]
         [1;94m   | [0m
-        [1;91merror[0m: [1mError parsing attribute "@relation": Reference causes a cycle or multiple cascade paths. One of the @relation attributes in this cycle must have `onDelete` and `onUpdate` referential actions set to `NoAction`. Cycle path: C.a → A.b → B.cs. Implicit default `onUpdate` value: `Cascade`. Read more at https://pris.ly/d/cyclic-referential-actions[0m
-          [1;94m-->[0m  [4mschema.prisma:23[0m
-        [1;94m   | [0m
-        [1;94m22 | [0m    bId    Int
-        [1;94m23 | [0m    [1;91ma      A    @relation(fields: [aId], references: [id])[0m
-        [1;94m24 | [0m    b      B    @relation(fields: [bId], references: [id])
-        [1;94m   | [0m
-        [1;91merror[0m: [1mError parsing attribute "@relation": Reference causes a cycle or multiple cascade paths. One of the @relation attributes in this cycle must have `onDelete` and `onUpdate` referential actions set to `NoAction`. Cycle path: C.b → B.as → A.cs. Implicit default `onUpdate` value: `Cascade`. Read more at https://pris.ly/d/cyclic-referential-actions[0m
+        [1;91merror[0m: [1mError parsing attribute "@relation": Reference causes a cycle or multiple cascade paths. One of the @relation attributes in this cycle must have `onDelete` and `onUpdate` referential actions set to `NoAction`. Cycle path: Comment.writtenBy → User.posts → Post.comments. Implicit default `onUpdate` value: `Cascade`. Read more at https://pris.ly/d/cyclic-referential-actions[0m
           [1;94m-->[0m  [4mschema.prisma:24[0m
         [1;94m   | [0m
-        [1;94m23 | [0m    a      A    @relation(fields: [aId], references: [id])
-        [1;94m24 | [0m    [1;91mb      B    @relation(fields: [bId], references: [id])[0m
-        [1;94m25 | [0m}
+        [1;94m23 | [0m    postId      Int
+        [1;94m24 | [0m    [1;91mwrittenBy   User     @relation(fields: [writtenById], references: [id])[0m
+        [1;94m25 | [0m    post        Post     @relation(fields: [postId], references: [id])
+        [1;94m   | [0m
+        [1;91merror[0m: [1mError parsing attribute "@relation": Reference causes a cycle or multiple cascade paths. One of the @relation attributes in this cycle must have `onDelete` and `onUpdate` referential actions set to `NoAction`. Cycle path: Comment.post → Post.author → User.comments. Implicit default `onUpdate` value: `Cascade`. Read more at https://pris.ly/d/cyclic-referential-actions[0m
+          [1;94m-->[0m  [4mschema.prisma:25[0m
+        [1;94m   | [0m
+        [1;94m24 | [0m    writtenBy   User     @relation(fields: [writtenById], references: [id])
+        [1;94m25 | [0m    [1;91mpost        Post     @relation(fields: [postId], references: [id])[0m
+        [1;94m26 | [0m}
         [1;94m   | [0m
     "#]];
 

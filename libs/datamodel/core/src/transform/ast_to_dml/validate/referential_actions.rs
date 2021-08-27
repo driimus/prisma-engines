@@ -13,7 +13,7 @@ use crate::{
 struct VisitedRelation<'a> {
     previous: Option<Rc<VisitedRelation<'a>>>,
     model_name: &'a str,
-    field_name: &'a str,
+    field_name: Option<&'a str>,
 }
 
 impl<'a> VisitedRelation<'a> {
@@ -22,7 +22,16 @@ impl<'a> VisitedRelation<'a> {
         Self {
             previous: None,
             model_name,
-            field_name,
+            field_name: Some(field_name),
+        }
+    }
+
+    /// Links the final model
+    fn link_model(self: &Rc<Self>, model_name: &'a str) -> Self {
+        Self {
+            previous: Some(self.clone()),
+            model_name,
+            field_name: None,
         }
     }
 
@@ -31,18 +40,23 @@ impl<'a> VisitedRelation<'a> {
         Self {
             previous: Some(self.clone()),
             model_name,
-            field_name,
+            field_name: Some(field_name),
         }
     }
 }
 
 impl<'a> fmt::Display for VisitedRelation<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut traversed_models = vec![format!("{}.{}", self.model_name, self.field_name)];
+        let output = |model_name: &str, field_name: Option<&str>| match field_name {
+            Some(field_name) => format!("{}.{}", model_name, field_name),
+            None => model_name.to_string(),
+        };
+
+        let mut traversed_models = vec![output(self.model_name, self.field_name)];
         let mut this = self;
 
         while let Some(next) = this.previous.as_ref() {
-            traversed_models.push(format!("{}.{}", next.model_name, next.field_name));
+            traversed_models.push(output(next.model_name, next.field_name));
             this = next;
         }
 
@@ -50,6 +64,75 @@ impl<'a> fmt::Display for VisitedRelation<'a> {
 
         write!(f, "{}", traversed_models.join(" → "))
     }
+}
+
+pub(crate) fn detect_multiple_cascading_paths(
+    datamodel: &Datamodel,
+    parent_model: &Model,
+    parent_field: &RelationField,
+) {
+    println!(
+        "Parent model {}, parent field: {}",
+        parent_model.name(),
+        parent_field.name()
+    );
+
+    //let mut visited = HashSet::new();
+    let mut next_relations = Vec::new();
+    let mut paths = Vec::new();
+
+    for field in parent_model.relation_fields().filter(|field| field.is_singular()) {
+        next_relations.push((field, Rc::new(VisitedRelation::root(parent_model.name(), field.name()))));
+    }
+
+    while let Some((field, visited_relations)) = next_relations.pop() {
+        let related_field = datamodel.find_related_field_bang(field).1;
+        let related_model = datamodel.find_model(&field.relation_info.to).unwrap();
+
+        // We don't need to cross back-relations
+        if field.is_list() {
+            continue;
+        }
+
+        let on_update = field
+            .relation_info
+            .on_update
+            .or(related_field.relation_info.on_update)
+            .unwrap_or_else(|| field.default_on_update_action());
+
+        let on_delete = field
+            .relation_info
+            .on_delete
+            .or(related_field.relation_info.on_delete)
+            .unwrap_or_else(|| field.default_on_delete_action());
+
+        if on_delete.triggers_modification() || on_update.triggers_modification() {
+            let has_next = related_model
+                .relation_fields()
+                .filter(|f| f.is_singular())
+                .next()
+                .is_some();
+
+            if !has_next {
+                paths.push(visited_relations.link_model(related_model.name()));
+                continue;
+            }
+
+            for related_field in related_model.relation_fields().filter(|f| f.is_singular()) {
+                next_relations.push((
+                    related_field,
+                    Rc::new(visited_relations.link_model(related_model.name())),
+                ));
+            }
+        }
+    }
+
+    println!("*********************");
+    for path in paths {
+        println!("Path: {}", path);
+    }
+    println!("*********************");
+    println!("");
 }
 
 /// In certain databases, such as SQL Server, it is not allowd to create
@@ -80,13 +163,15 @@ pub(crate) fn detect_cycles(
         let related_field = datamodel.find_related_field_bang(field).1;
         let related_model = datamodel.find_model(&field.relation_info.to).unwrap();
 
-        // we do not visit the relation field on the other side
-        // after this run.
         visited.insert((model.name(), field.name()));
-        visited.insert((related_model.name(), related_field.name()));
 
-        // skip many-to-many
-        if field.is_list() && related_field.is_list() {
+        // skip m2m
+        if related_field.is_list() {
+            visited.insert((related_model.name(), related_field.name()));
+        }
+
+        // Cycle only happens from the `@relation` side.
+        if field.is_list() {
             continue;
         }
 
@@ -96,25 +181,13 @@ pub(crate) fn detect_cycles(
             .relation_info
             .on_update
             .or(related_field.relation_info.on_update)
-            .unwrap_or_else(|| {
-                if field.is_list() {
-                    related_field.default_on_update_action()
-                } else {
-                    field.default_on_update_action()
-                }
-            });
+            .unwrap_or_else(|| field.default_on_update_action());
 
         let on_delete = field
             .relation_info
             .on_delete
             .or(related_field.relation_info.on_delete)
-            .unwrap_or_else(|| {
-                if field.is_list() {
-                    related_field.default_on_delete_action()
-                } else {
-                    field.default_on_delete_action()
-                }
-            });
+            .unwrap_or_else(|| field.default_on_delete_action());
 
         // a cycle has a meaning only if every relation in it triggers
         // modifications in the children
