@@ -1040,3 +1040,67 @@ fn cycle_detection_prints_the_right_path() {
 
     expect.assert_eq(&datamodel::parse_schema(dm).map(drop).unwrap_err());
 }
+
+#[test]
+fn separate_non_crossing_cascade_paths_should_work() {
+    let dm = r#"
+        datasource db {
+            provider = "sqlserver"
+            url      = "sqlserver://localhost:1433;database=master;user=SA;password=<YourStrong@Passw0rd>;trustServerCertificate=true"
+        }
+
+        model order_items {
+            order_id   Int
+            item_id    Int
+            product_id Int
+            orders     orders   @relation(fields: [order_id], references: [order_id], onDelete: Cascade)
+            products   products @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+
+            @@id([order_id, item_id])
+        }
+
+        model orders {
+            order_id      Int           @id @default(autoincrement())
+            store_id      Int
+            staff_id      Int
+            staffs        staffs        @relation(fields: [staff_id], references: [staff_id], onUpdate: NoAction)
+            stores        stores        @relation(fields: [store_id], references: [store_id], onDelete: Cascade)
+            order_items   order_items[]
+        }
+
+        model products {
+            product_id   Int           @id @default(autoincrement())
+            brand_id     Int
+            order_items  order_items[]
+            stocks       stocks[]
+        }
+
+        model staffs {
+            staff_id     Int      @id @default(autoincrement())
+            store_id     Int
+            manager_id   Int?
+            staffs       staffs?  @relation("staffsTostaffs_manager_id", fields: [manager_id], references: [staff_id], onDelete: NoAction, onUpdate: NoAction)
+            stores       stores   @relation(fields: [store_id], references: [store_id], onDelete: Cascade)
+            orders       orders[]
+            other_staffs staffs[] @relation("staffsTostaffs_manager_id")
+        }
+
+        model stocks {
+            store_id   Int
+            product_id Int
+            products   products @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+            stores     stores   @relation(fields: [store_id], references: [store_id], onDelete: Cascade)
+
+            @@id([store_id, product_id])
+        }
+
+        model stores {
+            store_id   Int      @id @default(autoincrement())
+            orders     orders[]
+            staffs     staffs[]
+            stocks     stocks[]
+        }
+    "#;
+
+    assert!(datamodel::parse_schema(dm).is_ok());
+}
