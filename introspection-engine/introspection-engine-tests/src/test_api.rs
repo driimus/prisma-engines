@@ -1,4 +1,6 @@
 pub use super::TestResult;
+pub use expect_test::expect;
+pub use test_macros::test_connector;
 pub use test_setup::{BitFlags, Capabilities, Tags};
 
 use crate::{BarrelMigrationExecutor, Result};

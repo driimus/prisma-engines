@@ -818,25 +818,23 @@ async fn unique_and_index_on_same_field_works_mariadb(api: &TestApi) -> TestResu
 }
 
 #[test_connector(tags(Sqlite))]
-async fn unique_and_index_on_same_field_works_sqlite(api: &TestApi) -> TestResult {
-    api.barrel()
-        .execute(|migration| {
-            migration.inject_custom(
-                "create table users (
-                       id Integer primary key not null unique
-                     );",
-            )
-        })
-        .await?;
+async fn unique_and_id_on_same_field_works_sqlite(api: &TestApi) -> TestResult {
+    let setup = r#"
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY NOT NULL UNIQUE
+        );
+    "#;
 
-    let dm = indoc! {r##"
+    api.raw_cmd(setup).await;
+
+    let expected = expect![[r#"
         model users {
-          id Int @id @unique @default(autoincrement())
+          id Int @id @unique(map: "sqlite_autoindex_users_1") @default(autoincrement())
         }
-    "##};
+    "#]];
 
-    let result = &api.introspect().await?;
-    api.assert_eq_datamodels(dm, result);
+    let introspected = api.introspect_dml().await?;
+    expected.assert_eq(&introspected);
 
     Ok(())
 }

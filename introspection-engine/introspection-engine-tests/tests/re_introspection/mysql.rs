@@ -1,8 +1,6 @@
 use barrel::types;
-use expect_test::expect;
 use indoc::indoc;
 use introspection_engine_tests::test_api::*;
-use test_macros::test_connector;
 
 #[test_connector(tags(Mysql))]
 async fn multiple_changed_relation_names(api: &TestApi) -> TestResult {

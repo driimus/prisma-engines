@@ -110,7 +110,7 @@ async fn remapping_tables_with_invalid_characters(api: &TestApi) -> TestResult {
     Ok(())
 }
 
-#[test_connector(exclude(Mssql))]
+#[test_connector(exclude(Mssql, Sqlite))]
 async fn remapping_models_in_relations(api: &TestApi) -> TestResult {
     let sql_family = api.sql_family();
 
@@ -162,7 +162,7 @@ async fn remapping_models_in_relations(api: &TestApi) -> TestResult {
     Ok(())
 }
 
-#[test_connector(exclude(Mssql))]
+#[test_connector(exclude(Mssql, Sqlite))]
 async fn remapping_models_in_relations_should_not_map_virtual_fields(api: &TestApi) -> TestResult {
     let sql_family = api.sql_family();
 

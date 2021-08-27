@@ -1,5 +1,6 @@
 mod mssql;
 mod mysql;
+mod sqlite;
 
 use barrel::types;
 use expect_test::expect;
@@ -1008,7 +1009,7 @@ async fn custom_enum_order(api: &TestApi) -> TestResult {
     Ok(())
 }
 
-#[test_connector(exclude(Mssql, Mysql))]
+#[test_connector(exclude(Mssql, Mysql, Sqlite))]
 async fn multiple_changed_relation_names_due_to_mapped_models(api: &TestApi) -> TestResult {
     api.barrel()
         .execute(|migration| {

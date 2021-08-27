@@ -1,7 +1,5 @@
 use barrel::types;
-use expect_test::expect;
-use introspection_engine_tests::{test_api::*, TestResult};
-use test_macros::test_connector;
+use introspection_engine_tests::test_api::*;
 
 #[test_connector(tags(Mssql))]
 async fn a_table_without_uniques_should_ignore(api: &TestApi) -> TestResult {

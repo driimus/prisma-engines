@@ -9,7 +9,7 @@ use indoc::indoc;
 use introspection_engine_tests::test_api::*;
 use test_macros::test_connector;
 
-#[test_connector(exclude(Mssql, Mysql))]
+#[test_connector(exclude(Mssql, Mysql, Sqlite))]
 async fn one_to_one_req_relation(api: &TestApi) -> TestResult {
     api.barrel()
         .execute(move |migration| {
@@ -60,7 +60,7 @@ async fn one_to_one_relation_on_a_singular_primary_key(api: &TestApi) -> TestRes
 
     let expected = expect![[r#"
         model Post {
-          id   Int  @unique
+          id   Int  @unique(map: "sqlite_autoindex_Post_1")
           User User @relation(fields: [id], references: [id], onDelete: NoAction, onUpdate: NoAction)
         }
 
@@ -113,14 +113,14 @@ async fn two_one_to_one_relations_between_the_same_models(api: &TestApi) -> Test
     let expected = expect![[r#"
         model Post {
           id                      Int   @id @default(autoincrement())
-          user_id                 Int   @unique
+          user_id                 Int   @unique(map: "sqlite_autoindex_Post_1")
           User_Post_user_idToUser User  @relation("Post_user_idToUser", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
           User_PostToUser_post_id User? @relation("PostToUser_post_id")
         }
 
         model User {
           id                      Int   @id @default(autoincrement())
-          post_id                 Int   @unique
+          post_id                 Int   @unique(map: "sqlite_autoindex_User_1")
           Post_PostToUser_post_id Post  @relation("PostToUser_post_id", fields: [post_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
           Post_Post_user_idToUser Post? @relation("Post_user_idToUser")
         }
@@ -131,7 +131,7 @@ async fn two_one_to_one_relations_between_the_same_models(api: &TestApi) -> Test
     Ok(())
 }
 
-#[test_connector(exclude(Mysql))]
+#[test_connector(exclude(Mysql, Sqlite))]
 async fn a_one_to_one_relation(api: &TestApi) -> TestResult {
     api.barrel()
         .execute(|migration| {
