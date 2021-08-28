@@ -12,15 +12,15 @@ pub fn constructor(ctx: CallContext) -> napi::Result<JsUndefined> {
 
     let params: ConstructorOptions = ctx.env.from_js_value(options)?;
 
-    let log_callback = ctx
-        .env
-        .create_threadsafe_function(&callback, 0, |mut ctx: ThreadSafeCallContext<String>| {
-            ctx.env.adjust_external_memory(ctx.value.len() as i64)?;
+    let mut log_callback =
+        ctx.env
+            .create_threadsafe_function(&callback, 0, |mut ctx: ThreadSafeCallContext<String>| {
+                ctx.env.adjust_external_memory(ctx.value.len() as i64)?;
 
-            ctx.env
-                .create_string_from_std(ctx.value)
-                .map(|js_string| vec![js_string])
-        })?;
+                ctx.env
+                    .create_string_from_std(ctx.value)
+                    .map(|js_string| vec![js_string])
+            })?;
 
     // log_callback.unref(&ctx.env)?;
 

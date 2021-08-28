@@ -44,7 +44,7 @@ struct EngineDatamodel {
 pub struct EngineBuilder {
     datamodel: EngineDatamodel,
     config: ValidatedConfiguration,
-    logger: ChannelLogger,
+    // logger: ChannelLogger,
     config_dir: PathBuf,
     env: HashMap<String, String>,
 }
@@ -54,7 +54,7 @@ pub struct ConnectedEngine {
     datamodel: EngineDatamodel,
     query_schema: Arc<QuerySchema>,
     executor: crate::Executor,
-    logger: ChannelLogger,
+    // logger: ChannelLogger,
     config_dir: PathBuf,
     env: HashMap<String, String>,
 }
@@ -153,16 +153,16 @@ impl QueryEngine {
             datasource_overrides: overrides,
         };
 
-        let logger = if telemetry.enabled {
-            ChannelLogger::new_with_telemetry(log_callback, telemetry.endpoint)
-        } else {
-            ChannelLogger::new(&log_level, log_queries, log_callback)
-        };
+        // let logger = if telemetry.enabled {
+        //     ChannelLogger::new_with_telemetry(log_callback, telemetry.endpoint)
+        // } else {
+        //     ChannelLogger::new(&log_level, log_queries, log_callback)
+        // };
 
         let builder = EngineBuilder {
             datamodel,
             config,
-            logger,
+            // logger,
             config_dir,
             env,
         };
@@ -179,53 +179,47 @@ impl QueryEngine {
         match *inner {
             Inner::Builder(ref builder) => {
                 let engine = builder
-                    .logger
-                    .clone()
-                    .with_logging(|| async move {
-                        let template = DatamodelConverter::convert(&builder.datamodel.ast);
+                    .clone();
+                let template = DatamodelConverter::convert(&builder.datamodel.ast);
 
-                        // We only support one data source & generator at the moment, so take the first one (default not exposed yet).
-                        let data_source = builder
-                            .config
-                            .subject
-                            .datasources
-                            .first()
-                            .ok_or_else(|| ApiError::configuration("No valid data source found"))?;
+                // We only support one data source & generator at the moment, so take the first one (default not exposed yet).
+                let data_source = builder
+                    .config
+                    .subject
+                    .datasources
+                    .first()
+                    .ok_or_else(|| ApiError::configuration("No valid data source found"))?;
 
-                        let preview_features: Vec<_> = builder.config.subject.preview_features().cloned().collect();
-                        let url = data_source
-                            .load_url_with_config_dir(&builder.config_dir, |key| {
-                                builder.env.get(key).map(ToString::to_string)
-                            })
-                            .map_err(|err| crate::error::ApiError::Conversion(err, builder.datamodel.raw.clone()))?;
-
-                        let (db_name, executor) = executor::load(data_source, &preview_features, &url).await?;
-                        let connector = executor.primary_connector();
-                        connector.get_connection().await?;
-
-                        // Build internal data model
-                        let internal_data_model = template.build(db_name);
-
-                        let query_schema = schema_builder::build(
-                            internal_data_model,
-                            BuildMode::Modern,
-                            true, // enable raw queries
-                            data_source.capabilities(),
-                            preview_features,
-                        );
-
-                        Ok(ConnectedEngine {
-                            datamodel: builder.datamodel.clone(),
-                            query_schema: Arc::new(query_schema),
-                            logger: builder.logger.clone(),
-                            executor,
-                            config_dir: builder.config_dir.clone(),
-                            env: builder.env.clone(),
-                        })
+                let preview_features: Vec<_> = builder.config.subject.preview_features().cloned().collect();
+                let url = data_source
+                    .load_url_with_config_dir(&builder.config_dir, |key| {
+                        builder.env.get(key).map(ToString::to_string)
                     })
-                    .await?;
+                    .map_err(|err| crate::error::ApiError::Conversion(err, builder.datamodel.raw.clone()))?;
 
-                *inner = Inner::Connected(engine);
+                let (db_name, executor) = executor::load(data_source, &preview_features, &url).await?;
+                let connector = executor.primary_connector();
+                connector.get_connection().await?;
+
+                // Build internal data model
+                let internal_data_model = template.build(db_name);
+
+                let query_schema = schema_builder::build(
+                    internal_data_model,
+                    BuildMode::Modern,
+                    true, // enable raw queries
+                    data_source.capabilities(),
+                    preview_features,
+                );
+
+                *inner = Inner::Connected(ConnectedEngine {
+                    datamodel: builder.datamodel.clone(),
+                    query_schema: Arc::new(query_schema),
+                    // logger: builder.logger.clone(),
+                    executor,
+                    config_dir: builder.config_dir.clone(),
+                    env: builder.env.clone(),
+                });
 
                 Ok(())
             }
@@ -244,7 +238,7 @@ impl QueryEngine {
 
                 let builder = EngineBuilder {
                     datamodel: engine.datamodel.clone(),
-                    logger: engine.logger.clone(),
+                    // logger: engine.logger.clone(),
                     config,
                     config_dir: engine.config_dir.clone(),
                     env: engine.env.clone(),
@@ -267,18 +261,14 @@ impl QueryEngine {
     ) -> crate::Result<PrismaResponse> {
         match *self.inner.read().await {
             Inner::Connected(ref engine) => {
-                engine
-                    .logger
-                    .with_logging(|| async move {
-                        let cx = global::get_text_map_propagator(|propagator| propagator.extract(&trace));
-                        let span = tracing::span!(Level::TRACE, "query");
+                let cx = global::get_text_map_propagator(|propagator| propagator.extract(&trace));
+                let span = tracing::span!(Level::TRACE, "query");
 
-                        span.set_parent(cx);
+                span.set_parent(cx);
 
-                        let handler = GraphQlHandler::new(engine.executor(), engine.query_schema());
-                        Ok(handler.handle(query, tx_id.map(TxId::from)).await)
-                    })
-                    .await
+                let handler = GraphQlHandler::new(engine.executor(), engine.query_schema());
+                Ok(handler.handle(query, tx_id.map(TxId::from)).await)
+            
             }
             Inner::Builder(_) => Err(ApiError::NotConnected),
         }
@@ -288,20 +278,15 @@ impl QueryEngine {
     pub async fn start_tx(&self, input: TxInput, trace: HashMap<String, String>) -> crate::Result<String> {
         match *self.inner.read().await {
             Inner::Connected(ref engine) => {
-                engine
-                    .logger
-                    .with_logging(|| async move {
-                        let cx = global::get_text_map_propagator(|propagator| propagator.extract(&trace));
-                        let span = tracing::span!(Level::TRACE, "query");
+                let cx = global::get_text_map_propagator(|propagator| propagator.extract(&trace));
+                let span = tracing::span!(Level::TRACE, "query");
 
-                        span.set_parent(cx);
+                span.set_parent(cx);
 
-                        match engine.executor().start_tx(input.max_wait, input.timeout).await {
-                            Ok(tx_id) => Ok(json!({ "id": tx_id.to_string() }).to_string()),
-                            Err(err) => Ok(map_known_error(err)?),
-                        }
-                    })
-                    .await
+                match engine.executor().start_tx(input.max_wait, input.timeout).await {
+                    Ok(tx_id) => Ok(json!({ "id": tx_id.to_string() }).to_string()),
+                    Err(err) => Ok(map_known_error(err)?),
+                }
             }
             Inner::Builder(_) => Err(ApiError::NotConnected),
         }
@@ -311,20 +296,15 @@ impl QueryEngine {
     pub async fn commit_tx(&self, tx_id: String, trace: HashMap<String, String>) -> crate::Result<String> {
         match *self.inner.read().await {
             Inner::Connected(ref engine) => {
-                engine
-                    .logger
-                    .with_logging(|| async move {
-                        let cx = global::get_text_map_propagator(|propagator| propagator.extract(&trace));
-                        let span = tracing::span!(Level::TRACE, "query");
+                let cx = global::get_text_map_propagator(|propagator| propagator.extract(&trace));
+                let span = tracing::span!(Level::TRACE, "query");
 
-                        span.set_parent(cx);
+                span.set_parent(cx);
 
-                        match engine.executor().commit_tx(TxId::from(tx_id)).await {
-                            Ok(_) => Ok("{}".to_string()),
-                            Err(err) => Ok(map_known_error(err)?),
-                        }
-                    })
-                    .await
+                match engine.executor().commit_tx(TxId::from(tx_id)).await {
+                    Ok(_) => Ok("{}".to_string()),
+                    Err(err) => Ok(map_known_error(err)?),
+                }
             }
             Inner::Builder(_) => Err(ApiError::NotConnected),
         }
@@ -334,20 +314,15 @@ impl QueryEngine {
     pub async fn rollback_tx(&self, tx_id: String, trace: HashMap<String, String>) -> crate::Result<String> {
         match *self.inner.read().await {
             Inner::Connected(ref engine) => {
-                engine
-                    .logger
-                    .with_logging(|| async move {
-                        let cx = global::get_text_map_propagator(|propagator| propagator.extract(&trace));
-                        let span = tracing::span!(Level::TRACE, "query");
+                let cx = global::get_text_map_propagator(|propagator| propagator.extract(&trace));
+                let span = tracing::span!(Level::TRACE, "query");
 
-                        span.set_parent(cx);
+                span.set_parent(cx);
 
-                        match engine.executor().rollback_tx(TxId::from(tx_id)).await {
-                            Ok(_) => Ok("{}".to_string()),
-                            Err(err) => Ok(map_known_error(err)?),
-                        }
-                    })
-                    .await
+                match engine.executor().rollback_tx(TxId::from(tx_id)).await {
+                    Ok(_) => Ok("{}".to_string()),
+                    Err(err) => Ok(map_known_error(err)?),
+                }
             }
             Inner::Builder(_) => Err(ApiError::NotConnected),
         }
